@@ -1,0 +1,162 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Apple-inspired base styles */
+@layer base {
+  * {
+    @apply antialiased;
+  }
+  
+  body {
+    @apply bg-apple-gray-50 text-apple-gray-900 font-sans;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+      'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+      sans-serif;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+  }
+}
+
+/* Custom component styles */
+@layer components {
+  /* Apple-style button */
+  .btn-apple {
+    @apply px-6 py-3 rounded-full font-medium transition-all duration-200;
+    @apply hover:scale-105 active:scale-95;
+    @apply shadow-apple hover:shadow-apple-lg;
+  }
+  
+  .btn-apple-primary {
+    @apply btn-apple bg-apple-gray-900 text-white;
+    @apply hover:bg-apple-gray-800;
+  }
+  
+  .btn-apple-secondary {
+    @apply btn-apple bg-white text-apple-gray-900 border border-apple-gray-200;
+    @apply hover:bg-apple-gray-50;
+  }
+  
+  /* Apple-style card */
+  .card-apple {
+    @apply bg-white rounded-2xl shadow-apple;
+    @apply transition-all duration-300;
+    @apply hover:shadow-apple-lg hover:-translate-y-1;
+  }
+  
+  /* Apple-style input */
+  .input-apple {
+    @apply w-full px-4 py-3 rounded-xl border border-apple-gray-200;
+    @apply bg-white text-apple-gray-900;
+    @apply focus:outline-none focus:ring-2 focus:ring-apple-blue-500 focus:border-transparent;
+    @apply transition-all duration-200;
+  }
+  
+  /* Section container */
+  .section-container {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+  
+  /* Smooth scroll */
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* Print styles */
+@media print {
+  /* Hide navigation and footer */
+  nav,
+  footer,
+  .no-print {
+    display: none !important;
+  }
+
+  /* Remove backgrounds and shadows */
+  * {
+    background: white !important;
+    color: black !important;
+    box-shadow: none !important;
+  }
+
+  /* Optimize page breaks */
+  .page-break-before {
+    page-break-before: always;
+  }
+
+  .page-break-after {
+    page-break-after: always;
+  }
+
+  .page-break-inside {
+    page-break-inside: avoid;
+  }
+
+  /* Ensure images fit */
+  img {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  /* Optimize text */
+  h1, h2, h3, h4, h5, h6 {
+    page-break-after: avoid;
+    color: black !important;
+  }
+
+  /* Links */
+  a {
+    color: black !important;
+    text-decoration: underline !important;
+  }
+
+  a[href^="http"]:after {
+    content: " (" attr(href) ")";
+    font-size: 0.8em;
+  }
+
+  /* Cards and sections */
+  .card-apple,
+  section {
+    page-break-inside: avoid;
+    border: 1px solid #ccc !important;
+    margin-bottom: 1rem;
+  }
+
+  /* Buttons as text */
+  button,
+  .btn-apple {
+    border: 1px solid #000 !important;
+    background: white !important;
+    color: black !important;
+  }
+
+  /* Hide interactive elements */
+  button:not(.print-visible),
+  .no-print-button {
+    display: none !important;
+  }
+
+  /* Optimize spacing */
+  .section-container {
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+
+  /* Print header */
+  @page {
+    margin: 2cm;
+  }
+
+  /* Event details */
+  .event-details {
+    page-break-inside: avoid;
+  }
+
+  /* Timeline */
+  .timeline-item {
+    page-break-inside: avoid;
+  }
+}

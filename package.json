@@ -1,0 +1,72 @@
+{
+  "name": "wedding-invite",
+  "version": "1.0.0",
+  "description": "A beautiful, fully customizable wedding website template built with React and Tailwind CSS. 100% FREE - no credit card required!",
+  "keywords": [
+    "wedding",
+    "wedding-website",
+    "react",
+    "tailwindcss",
+    "open-source",
+    "free",
+    "template",
+    "invitation"
+  ],
+  "author": "",
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/wedding-invite.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-username/wedding-invite/issues"
+  },
+  "homepage": "https://github.com/your-username/wedding-invite#readme",
+  "private": true,
+  "dependencies": {
+    "@testing-library/jest-dom": "^5.17.0",
+    "@testing-library/react": "^13.4.0",
+    "@testing-library/user-event": "^13.5.0",
+    "busboy": "^1.6.0",
+    "express": "^4.21.2",
+    "googleapis": "^144.0.0",
+    "ics": "^3.8.1",
+    "node-fetch": "^3.3.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.2",
+    "react-scripts": "^5.0.1",
+    "serverless-http": "^3.2.0",
+    "web-vitals": "^2.1.4"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.20",
+    "gh-pages": "^6.1.1",
+    "postcss": "^8.4.45",
+    "tailwindcss": "^3.4.10"
+  }
+}

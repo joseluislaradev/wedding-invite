@@ -1,0 +1,66 @@
+/* Custom font settings */
+body {
+    font-family: 'Poppins', sans-serif;
+  }
+  
+  /* Customize padding and spacing */
+  .container {
+    padding: 20px;
+  }
+  
+  /* Custom button styling */
+  button {
+    background-color: #3b82f6;
+    color: white;
+    font-weight: bold;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+  }
+  
+  button:hover {
+    background-color: #2563eb;
+  }
+  
+  /* Card styling */
+  .card {
+    background-color: rgba(31, 41, 55, 0.8); /* Gray with opacity */
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    transition: all 0.3s ease;
+  }
+  
+  .card:hover {
+    background-color: rgba(31, 41, 55, 0.9);
+  }
+  
+  /* Font size adjustments */
+  h1 {
+    font-size: 2.5rem;
+  }
+  
+  h2 {
+    font-size: 1.75rem;
+  }
+  
+  p {
+    font-size: 1rem;
+  }
+  /* Add padding to the container to push content below the header */
+.container {
+    padding-top: 10px; /* Adjust this based on your header's height */
+  }
+  
+  header {
+    position: fixed;
+    top: 0;
+    width: 100%;
+    z-index: 1000; /* Keep the header above other content */
+  }
+  
+  body {
+    margin: 0;
+    padding: 0;
+  }
