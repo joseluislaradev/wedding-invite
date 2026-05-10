@@ -3,15 +3,28 @@ import siteConfig from '../siteConfig';
 
 const uploadStates = {
   idle: 'idle',
+  preparing: 'preparing',
   uploading: 'uploading',
   success: 'success',
   error: 'error',
 };
 
+const MAX_IMAGE_DIMENSION = 1920;
+const INITIAL_JPEG_QUALITY = 0.8;
+const MIN_JPEG_QUALITY = 0.65;
+const QUALITY_STEP = 0.05;
+
 function UploadPhotos() {
   const [status, setStatus] = useState(uploadStates.idle);
   const [message, setMessage] = useState('');
   const [sheetConfig, setSheetConfig] = useState(null);
+  const [progress, setProgress] = useState({
+    current: 0,
+    total: 0,
+    successCount: 0,
+    failedFiles: [],
+  });
+  const [retryFiles, setRetryFiles] = useState([]);
   const cameraInputRef = useRef(null);
   const fileInputRef = useRef(null);
   const localUploadConfig = siteConfig.uploadPhotos || {};
@@ -57,9 +70,22 @@ function UploadPhotos() {
     getConfigValue('title') ||
     (isUsingSheetConfig ? '' : siteConfig.couple?.displayName || siteConfig.app?.name || 'Nuestra boda');
 
-  const validateFile = (file) => {
-    const maxFileSize = uploadConfig.maxFileSize || localUploadConfig.maxFileSize || 10;
-    const maxSize = maxFileSize * 1024 * 1024;
+  const formatTemplate = (template, values) => (
+    Object.entries(values).reduce(
+      (text, [key, value]) => text.replaceAll(`{${key}}`, value),
+      template
+    )
+  );
+
+  const getMaxCompressedSize = () => {
+    const maxFileSize = Number(uploadConfig.maxFileSize || localUploadConfig.maxFileSize || 4);
+    return {
+      maxFileSize,
+      maxSizeBytes: maxFileSize * 1024 * 1024,
+    };
+  };
+
+  const validateFileType = (file) => {
     const allowedTypes = uploadConfig.allowedTypes || localUploadConfig.allowedTypes || [
       'image/jpeg',
       'image/png',
@@ -74,72 +100,198 @@ function UploadPhotos() {
       return getConfigValue('invalidTypeMessage', 'Ese formato de imagen no es compatible.');
     }
 
-    if (file.size > maxSize) {
-      return getConfigValue('fileTooLargeMessage', 'La foto es muy grande. Máximo {maxFileSize} MB.')
-        .replace('{maxFileSize}', maxFileSize);
-    }
-
     return '';
   };
 
-  const uploadFile = async (file) => {
-    const validationError = validateFile(file);
+  const loadImage = (file) => new Promise((resolve, reject) => {
+    const image = new Image();
+    const objectUrl = URL.createObjectURL(file);
 
-    if (validationError) {
-      setStatus(uploadStates.error);
-      setMessage(validationError);
-      return;
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error(getConfigValue('compressionFailedMessage', 'No se pudo preparar la foto.')));
+    };
+    image.src = objectUrl;
+  });
+
+  const canvasToBlob = (canvas, quality) => new Promise((resolve) => {
+    canvas.toBlob(resolve, 'image/jpeg', quality);
+  });
+
+  const compressImage = async (file) => {
+    const image = await loadImage(file);
+    const scale = Math.min(
+      1,
+      MAX_IMAGE_DIMENSION / Math.max(image.naturalWidth, image.naturalHeight)
+    );
+    const width = Math.max(1, Math.round(image.naturalWidth * scale));
+    const height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    const { maxFileSize, maxSizeBytes } = getMaxCompressedSize();
+
+    canvas.width = width;
+    canvas.height = height;
+    context.drawImage(image, 0, 0, width, height);
+
+    for (
+      let quality = INITIAL_JPEG_QUALITY;
+      quality >= MIN_JPEG_QUALITY - 0.001;
+      quality -= QUALITY_STEP
+    ) {
+      const blob = await canvasToBlob(canvas, Number(quality.toFixed(2)));
+
+      if (!blob) {
+        throw new Error(getConfigValue('compressionFailedMessage', 'No se pudo preparar la foto.'));
+      }
+
+      if (blob.size <= maxSizeBytes) {
+        const originalName = file.name.replace(/\.[^.]+$/, '');
+        return new File([blob], `${originalName || 'foto-boda'}.jpg`, {
+          type: 'image/jpeg',
+          lastModified: Date.now(),
+        });
+      }
     }
 
-    setStatus(uploadStates.uploading);
-    setMessage(getConfigValue('uploadingMessage', 'Subiendo tu foto...'));
+    throw new Error(formatTemplate(
+      getConfigValue('compressedFileTooLargeMessage', 'La foto sigue siendo muy grande después de comprimirla. Máximo {maxFileSize} MB.'),
+      { maxFileSize }
+    ));
+  };
 
+  const uploadSinglePhoto = async (file) => {
     const formData = new FormData();
     formData.append('images', file);
 
-    try {
-      const response = await fetch('/.netlify/functions/upload', {
-        method: 'POST',
-        body: formData,
-      });
+    const response = await fetch('/.netlify/functions/upload', {
+      method: 'POST',
+      body: formData,
+    });
 
-      const contentType = response.headers.get('content-type') || '';
-      const result = contentType.includes('application/json')
-        ? await response.json()
-        : { success: false, message: await response.text() };
+    const contentType = response.headers.get('content-type') || '';
+    const result = contentType.includes('application/json')
+      ? await response.json()
+      : { success: false, message: await response.text() };
 
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || 'No se pudo guardar la foto.');
+    if (!response.ok || !result.success) {
+      throw new Error(result.message || 'No se pudo guardar la foto.');
+    }
+
+    return result;
+  };
+
+  const uploadFiles = async (selectedFiles) => {
+    const files = Array.from(selectedFiles || []);
+    const totalFiles = files.length;
+    let successCount = 0;
+    const failedFiles = [];
+
+    setRetryFiles([]);
+
+    if (totalFiles === 0) {
+      setStatus(uploadStates.error);
+      setMessage(getConfigValue('noFileMessage', 'No se seleccionó ninguna foto.'));
+      return;
+    }
+
+    setProgress({ current: 0, total: totalFiles, successCount: 0, failedFiles: [] });
+
+    for (let index = 0; index < totalFiles; index += 1) {
+      const file = files[index];
+      const current = index + 1;
+      const typeError = validateFileType(file);
+
+      if (typeError) {
+        failedFiles.push({ file, name: file?.name || `Foto ${current}`, reason: typeError });
+        setProgress({ current, total: totalFiles, successCount, failedFiles: [...failedFiles] });
+        continue;
       }
 
+      try {
+        setStatus(uploadStates.preparing);
+        setProgress({ current, total: totalFiles, successCount, failedFiles: [...failedFiles] });
+        setMessage(totalFiles === 1
+          ? getConfigValue('preparingMessage', 'Preparando foto...')
+          : formatTemplate(
+            getConfigValue('preparingMultipleMessage', 'Preparando {current} de {total}...'),
+            { current, total: totalFiles }
+          ));
+
+        const compressedFile = await compressImage(file);
+
+        setStatus(uploadStates.uploading);
+        setMessage(totalFiles === 1
+          ? getConfigValue('uploadingMessage', 'Subiendo tu foto...')
+          : formatTemplate(
+            getConfigValue('uploadingMultipleMessage', 'Subiendo {current} de {total} fotos...'),
+            { current, total: totalFiles }
+          ));
+
+        await uploadSinglePhoto(compressedFile);
+        successCount += 1;
+        setProgress({ current, total: totalFiles, successCount, failedFiles: [...failedFiles] });
+      } catch (error) {
+        console.error('Error processing photo upload:', error);
+        failedFiles.push({
+          file,
+          name: file?.name || `Foto ${current}`,
+          reason: error.message || getConfigValue('errorMessage', 'No se pudo subir la foto. Intenta otra vez.'),
+        });
+        setProgress({ current, total: totalFiles, successCount, failedFiles: [...failedFiles] });
+      }
+    }
+
+    setRetryFiles(failedFiles.map((failedFile) => failedFile.file).filter(Boolean));
+
+    if (totalFiles === 1 && successCount === 1) {
       setStatus(uploadStates.success);
       setMessage(getConfigValue('successMessage', '¡Gracias! Tu foto fue guardada.'));
-    } catch (error) {
-      console.error('Error during photo upload:', error);
-      setStatus(uploadStates.error);
-      setMessage(getConfigValue('errorMessage', 'No se pudo subir la foto. Intenta otra vez.'));
+      return;
     }
+
+    const summary = formatTemplate(
+      getConfigValue('multiUploadSummaryMessage', 'Se subieron {successCount} de {total} fotos.'),
+      { successCount, total: totalFiles }
+    );
+
+    setStatus(failedFiles.length > 0 ? uploadStates.error : uploadStates.success);
+    setMessage(summary);
   };
 
   const handleInputChange = (event) => {
-    const file = event.target.files?.[0];
+    const selectedFiles = Array.from(event.target.files || []);
     event.target.value = '';
-    uploadFile(file);
+    uploadFiles(selectedFiles);
   };
 
   const openCamera = () => {
-    if (status !== uploadStates.uploading) {
+    if (status !== uploadStates.preparing && status !== uploadStates.uploading) {
       cameraInputRef.current?.click();
     }
   };
 
   const openFilePicker = () => {
-    if (status !== uploadStates.uploading) {
+    if (status !== uploadStates.preparing && status !== uploadStates.uploading) {
       fileInputRef.current?.click();
     }
   };
 
+  const retryFailedUploads = () => {
+    if (retryFiles.length > 0) {
+      uploadFiles(retryFiles);
+    } else {
+      openCamera();
+    }
+  };
+
+  const isPreparing = status === uploadStates.preparing;
   const isUploading = status === uploadStates.uploading;
+  const isBusy = isPreparing || isUploading;
   const isSuccess = status === uploadStates.success;
   const isError = status === uploadStates.error;
   const albumLabel = getConfigValue('albumLabel', 'Álbum de la boda');
@@ -154,6 +306,12 @@ function UploadPhotos() {
   const selectFileButton = getConfigValue('selectFileButton', 'Seleccionar archivo');
   const helperText = getConfigValue('helperText', 'Sin login. Solo toma la foto y listo.');
   const hasHeaderText = Boolean(albumLabel || eventName || instructions);
+  const progressText = progress.total > 1
+    ? formatTemplate(
+      getConfigValue('progressCountMessage', '{successCount} de {total} subidas'),
+      { successCount: progress.successCount, total: progress.total }
+    )
+    : '';
   const pageStyle = {
     color: getConfigValue('textColor', '#1c1c1e'),
     background: `linear-gradient(135deg, ${getConfigValue('backgroundStartColor', '#e0f2fe')}, ${getConfigValue('backgroundMiddleColor', '#ede9fe')}, ${getConfigValue('backgroundEndColor', '#f5d0fe')})`,
@@ -164,6 +322,14 @@ function UploadPhotos() {
   const primaryTextStyle = { color: getConfigValue('primaryColor', '#4338ca') };
   const iconStyle = {
     background: `linear-gradient(135deg, ${getConfigValue('iconStartColor', '#22d3ee')}, ${getConfigValue('iconEndColor', '#c026d3')})`,
+  };
+  const errorBoxStyle = {
+    backgroundColor: getConfigValue('errorBackgroundColor', '#fef2f2'),
+    borderColor: getConfigValue('errorBorderColor', '#fecaca'),
+    color: getConfigValue('errorTextColor', '#b91c1c'),
+  };
+  const errorLabelStyle = {
+    color: getConfigValue('errorLabelColor', '#ef4444'),
   };
 
   return (
@@ -205,7 +371,7 @@ function UploadPhotos() {
           <button
             type="button"
             onClick={openCamera}
-            disabled={isUploading}
+            disabled={isBusy}
             className="flex min-h-[430px] flex-1 flex-col items-center justify-center rounded-[1.5rem] border-2 border-white/80 px-6 py-10 text-center shadow-apple transition active:scale-[0.99] disabled:cursor-wait disabled:opacity-80"
             style={panelStyle}
           >
@@ -236,17 +402,63 @@ function UploadPhotos() {
               {isSuccess ? anotherPhotoButton : cameraButton}
             </span>
             {(message || openCameraMessage) && (
-              <span
-                className="mt-4 text-lg leading-7"
-                style={mutedTextStyle}
-              >
-                {message || openCameraMessage}
-              </span>
+              isError ? (
+                <span
+                  className="mt-5 max-w-xs rounded-2xl border px-4 py-3 text-base font-semibold leading-6"
+                  style={errorBoxStyle}
+                >
+                  <span
+                    className="block text-xs font-bold uppercase tracking-[0.14em]"
+                    style={errorLabelStyle}
+                  >
+                    Error
+                  </span>
+                  {message}
+                  {progress.failedFiles.length > 0 && (
+                    <span className="mt-3 block text-left text-sm font-medium leading-5">
+                      {progress.failedFiles.slice(0, 3).map((failedFile) => (
+                        <span key={`${failedFile.name}-${failedFile.reason}`} className="block">
+                          {failedFile.name}: {failedFile.reason}
+                        </span>
+                      ))}
+                      {progress.failedFiles.length > 3 && (
+                        <span className="block">
+                          {formatTemplate(
+                            getConfigValue('moreFailedFilesMessage', 'Y {count} más.'),
+                            { count: progress.failedFiles.length - 3 }
+                          )}
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </span>
+              ) : (
+                <span
+                  className="mt-4 text-lg leading-7"
+                  style={mutedTextStyle}
+                >
+                  {message || openCameraMessage}
+                </span>
+              )
             )}
 
-            {isUploading && (
-              <span className="mt-8 h-3 w-40 overflow-hidden rounded-full bg-white/70">
-                <span className="block h-full w-2/3 animate-pulse rounded-full bg-indigo-600" />
+            {isBusy && (
+              <span className="mt-8 flex w-full max-w-[12rem] flex-col items-center gap-2">
+                <span className="h-3 w-full overflow-hidden rounded-full bg-white/70">
+                  <span
+                    className="block h-full rounded-full bg-indigo-600 transition-all"
+                    style={{
+                      width: progress.total > 0
+                        ? `${Math.max(8, Math.round((progress.current / progress.total) * 100))}%`
+                        : '50%',
+                    }}
+                  />
+                </span>
+                {progressText && (
+                  <span className="text-sm font-semibold" style={mutedTextStyle}>
+                    {progressText}
+                  </span>
+                )}
               </span>
             )}
           </button>
@@ -254,7 +466,7 @@ function UploadPhotos() {
           {isError && retryButton && (
             <button
               type="button"
-              onClick={openCamera}
+              onClick={retryFailedUploads}
               className="mt-4 w-full rounded-2xl px-6 py-5 text-lg font-bold text-white shadow-apple active:scale-[0.99]"
               style={{ backgroundColor: getConfigValue('primaryDarkColor', '#111827') }}
             >
@@ -266,7 +478,7 @@ function UploadPhotos() {
             <button
               type="button"
               onClick={openFilePicker}
-              disabled={isUploading}
+              disabled={isBusy}
               className="mt-4 w-full rounded-2xl border border-white/70 px-5 py-4 text-base font-semibold shadow-apple disabled:cursor-wait disabled:opacity-70"
               style={{ ...panelStyle, ...primaryTextStyle }}
             >
@@ -296,6 +508,7 @@ function UploadPhotos() {
           ref={fileInputRef}
           type="file"
           accept="image/*"
+          multiple
           onChange={handleInputChange}
           className="hidden"
         />
