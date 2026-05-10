@@ -74,8 +74,8 @@ export async function handler(event) {
     const rows = response.data.values || [];
     const config = {};
 
-    rows.forEach(([key, value]) => {
-      if (!key || value === undefined || key.trim().toLowerCase() === 'key') {
+    rows.forEach(([key, value = '']) => {
+      if (!key || key.trim().toLowerCase() === 'key') {
         return;
       }
 

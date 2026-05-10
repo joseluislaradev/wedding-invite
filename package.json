@@ -31,6 +31,7 @@
     "googleapis": "^144.0.0",
     "ics": "^3.8.1",
     "node-fetch": "^3.3.2",
+    "qrcode.react": "^4.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.2",

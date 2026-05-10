@@ -11,12 +11,19 @@ const uploadStates = {
 function UploadPhotos() {
   const [status, setStatus] = useState(uploadStates.idle);
   const [message, setMessage] = useState('');
-  const [sheetConfig, setSheetConfig] = useState({});
+  const [sheetConfig, setSheetConfig] = useState(null);
   const cameraInputRef = useRef(null);
   const fileInputRef = useRef(null);
-  const uploadConfig = {
-    ...(siteConfig.uploadPhotos || {}),
-    ...sheetConfig,
+  const localUploadConfig = siteConfig.uploadPhotos || {};
+  const isUsingSheetConfig = sheetConfig !== null;
+  const uploadConfig = isUsingSheetConfig ? sheetConfig : localUploadConfig;
+
+  const getConfigValue = (key, fallback = '') => {
+    if (isUsingSheetConfig) {
+      return Object.prototype.hasOwnProperty.call(sheetConfig, key) ? sheetConfig[key] : '';
+    }
+
+    return localUploadConfig[key] ?? fallback;
   };
 
   useEffect(() => {
@@ -32,6 +39,9 @@ function UploadPhotos() {
         }
       } catch (error) {
         console.warn('Using local upload config because Google Sheets config could not be loaded.', error);
+        if (isMounted) {
+          setSheetConfig(null);
+        }
       }
     };
 
@@ -43,31 +53,29 @@ function UploadPhotos() {
   }, []);
 
   const eventName =
-    uploadConfig.eventName ||
-    uploadConfig.title ||
-    siteConfig.couple?.displayName ||
-    siteConfig.app?.name ||
-    'Nuestra boda';
+    getConfigValue('eventName') ||
+    getConfigValue('title') ||
+    (isUsingSheetConfig ? '' : siteConfig.couple?.displayName || siteConfig.app?.name || 'Nuestra boda');
 
   const validateFile = (file) => {
-    const maxFileSize = uploadConfig.maxFileSize || 10;
+    const maxFileSize = uploadConfig.maxFileSize || localUploadConfig.maxFileSize || 10;
     const maxSize = maxFileSize * 1024 * 1024;
-    const allowedTypes = uploadConfig.allowedTypes || [
+    const allowedTypes = uploadConfig.allowedTypes || localUploadConfig.allowedTypes || [
       'image/jpeg',
       'image/png',
       'image/webp',
     ];
 
     if (!file) {
-      return uploadConfig.noFileMessage || 'No se seleccionó ninguna foto.';
+      return getConfigValue('noFileMessage', 'No se seleccionó ninguna foto.');
     }
 
     if (!allowedTypes.includes(file.type)) {
-      return uploadConfig.invalidTypeMessage || 'Ese formato de imagen no es compatible.';
+      return getConfigValue('invalidTypeMessage', 'Ese formato de imagen no es compatible.');
     }
 
     if (file.size > maxSize) {
-      return (uploadConfig.fileTooLargeMessage || 'La foto es muy grande. Máximo {maxFileSize} MB.')
+      return getConfigValue('fileTooLargeMessage', 'La foto es muy grande. Máximo {maxFileSize} MB.')
         .replace('{maxFileSize}', maxFileSize);
     }
 
@@ -84,7 +92,7 @@ function UploadPhotos() {
     }
 
     setStatus(uploadStates.uploading);
-    setMessage(uploadConfig.uploadingMessage || 'Subiendo tu foto...');
+    setMessage(getConfigValue('uploadingMessage', 'Subiendo tu foto...'));
 
     const formData = new FormData();
     formData.append('images', file);
@@ -105,11 +113,11 @@ function UploadPhotos() {
       }
 
       setStatus(uploadStates.success);
-      setMessage(uploadConfig.successMessage || '¡Gracias! Tu foto fue guardada.');
+      setMessage(getConfigValue('successMessage', '¡Gracias! Tu foto fue guardada.'));
     } catch (error) {
       console.error('Error during photo upload:', error);
       setStatus(uploadStates.error);
-      setMessage(uploadConfig.errorMessage || 'No se pudo subir la foto. Intenta otra vez.');
+      setMessage(getConfigValue('errorMessage', 'No se pudo subir la foto. Intenta otra vez.'));
     }
   };
 
@@ -134,16 +142,28 @@ function UploadPhotos() {
   const isUploading = status === uploadStates.uploading;
   const isSuccess = status === uploadStates.success;
   const isError = status === uploadStates.error;
+  const albumLabel = getConfigValue('albumLabel', 'Álbum de la boda');
+  const instructions = getConfigValue(
+    'instructions',
+    'Toma una foto y se guardará automáticamente en nuestro álbum.'
+  );
+  const cameraButton = getConfigValue('cameraButton', 'Tomar foto');
+  const anotherPhotoButton = getConfigValue('anotherPhotoButton', 'Tomar otra foto');
+  const openCameraMessage = getConfigValue('openCameraMessage', 'Toca aquí para abrir la cámara.');
+  const retryButton = getConfigValue('retryButton', 'Intentar de nuevo');
+  const selectFileButton = getConfigValue('selectFileButton', 'Seleccionar archivo');
+  const helperText = getConfigValue('helperText', 'Sin login. Solo toma la foto y listo.');
+  const hasHeaderText = Boolean(albumLabel || eventName || instructions);
   const pageStyle = {
-    color: uploadConfig.textColor,
-    background: `linear-gradient(135deg, ${uploadConfig.backgroundStartColor}, ${uploadConfig.backgroundMiddleColor}, ${uploadConfig.backgroundEndColor})`,
+    color: getConfigValue('textColor', '#1c1c1e'),
+    background: `linear-gradient(135deg, ${getConfigValue('backgroundStartColor', '#e0f2fe')}, ${getConfigValue('backgroundMiddleColor', '#ede9fe')}, ${getConfigValue('backgroundEndColor', '#f5d0fe')})`,
   };
-  const mutedTextStyle = { color: uploadConfig.mutedTextColor };
-  const cardStyle = { backgroundColor: uploadConfig.cardBackgroundColor };
-  const panelStyle = { backgroundColor: uploadConfig.panelBackgroundColor };
-  const primaryTextStyle = { color: uploadConfig.primaryColor };
+  const mutedTextStyle = { color: getConfigValue('mutedTextColor', '#636366') };
+  const cardStyle = { backgroundColor: getConfigValue('cardBackgroundColor', 'rgba(255,255,255,0.45)') };
+  const panelStyle = { backgroundColor: getConfigValue('panelBackgroundColor', 'rgba(255,255,255,0.35)') };
+  const primaryTextStyle = { color: getConfigValue('primaryColor', '#4338ca') };
   const iconStyle = {
-    background: `linear-gradient(135deg, ${uploadConfig.iconStartColor}, ${uploadConfig.iconEndColor})`,
+    background: `linear-gradient(135deg, ${getConfigValue('iconStartColor', '#22d3ee')}, ${getConfigValue('iconEndColor', '#c026d3')})`,
   };
 
   return (
@@ -152,23 +172,31 @@ function UploadPhotos() {
       style={pageStyle}
     >
       <div className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-md flex-col">
-        <header className="mb-6 text-center">
-          <p
-            className="mb-2 text-sm font-semibold uppercase tracking-[0.18em]"
-            style={mutedTextStyle}
-          >
-            {uploadConfig.albumLabel || 'Álbum de la boda'}
-          </p>
-          <h1 className="text-4xl font-bold leading-tight">
-            {eventName}
-          </h1>
-          <p
-            className="mx-auto mt-3 max-w-xs text-lg leading-7"
-            style={mutedTextStyle}
-          >
-            {uploadConfig.instructions || 'Toma una foto y se guardará automáticamente en nuestro álbum.'}
-          </p>
-        </header>
+        {hasHeaderText && (
+          <header className="mb-6 text-center">
+            {albumLabel && (
+              <p
+                className="mb-2 text-sm font-semibold uppercase tracking-[0.18em]"
+                style={mutedTextStyle}
+              >
+                {albumLabel}
+              </p>
+            )}
+            {eventName && (
+              <h1 className="text-4xl font-bold leading-tight">
+                {eventName}
+              </h1>
+            )}
+            {instructions && (
+              <p
+                className="mx-auto mt-3 max-w-xs text-lg leading-7"
+                style={mutedTextStyle}
+              >
+                {instructions}
+              </p>
+            )}
+          </header>
+        )}
 
         <section
           className="flex flex-1 flex-col rounded-[2rem] border-2 border-white/80 p-5 shadow-apple-xl backdrop-blur-apple"
@@ -205,16 +233,16 @@ function UploadPhotos() {
               className="text-3xl font-bold"
               style={primaryTextStyle}
             >
-              {isSuccess
-                ? uploadConfig.anotherPhotoButton || 'Tomar otra foto'
-                : uploadConfig.cameraButton || 'Tomar foto'}
+              {isSuccess ? anotherPhotoButton : cameraButton}
             </span>
-            <span
-              className="mt-4 min-h-[3.5rem] text-lg leading-7"
-              style={mutedTextStyle}
-            >
-              {message || uploadConfig.openCameraMessage || 'Toca aquí para abrir la cámara.'}
-            </span>
+            {(message || openCameraMessage) && (
+              <span
+                className="mt-4 text-lg leading-7"
+                style={mutedTextStyle}
+              >
+                {message || openCameraMessage}
+              </span>
+            )}
 
             {isUploading && (
               <span className="mt-8 h-3 w-40 overflow-hidden rounded-full bg-white/70">
@@ -223,33 +251,37 @@ function UploadPhotos() {
             )}
           </button>
 
-          {isError && (
+          {isError && retryButton && (
             <button
               type="button"
               onClick={openCamera}
               className="mt-4 w-full rounded-2xl px-6 py-5 text-lg font-bold text-white shadow-apple active:scale-[0.99]"
-              style={{ backgroundColor: uploadConfig.primaryDarkColor }}
+              style={{ backgroundColor: getConfigValue('primaryDarkColor', '#111827') }}
             >
-              {uploadConfig.retryButton || 'Intentar de nuevo'}
+              {retryButton}
             </button>
           )}
 
-          <button
-            type="button"
-            onClick={openFilePicker}
-            disabled={isUploading}
-            className="mt-4 w-full rounded-2xl border border-white/70 px-5 py-4 text-base font-semibold shadow-apple disabled:cursor-wait disabled:opacity-70"
-            style={{ ...panelStyle, ...primaryTextStyle }}
-          >
-            {uploadConfig.selectFileButton || 'Seleccionar archivo'}
-          </button>
+          {selectFileButton && (
+            <button
+              type="button"
+              onClick={openFilePicker}
+              disabled={isUploading}
+              className="mt-4 w-full rounded-2xl border border-white/70 px-5 py-4 text-base font-semibold shadow-apple disabled:cursor-wait disabled:opacity-70"
+              style={{ ...panelStyle, ...primaryTextStyle }}
+            >
+              {selectFileButton}
+            </button>
+          )}
 
-          <p
-            className="mt-4 text-center text-sm leading-6"
-            style={mutedTextStyle}
-          >
-            {uploadConfig.helperText || 'Sin login. Solo toma la foto y listo.'}
-          </p>
+          {helperText && (
+            <p
+              className="mt-4 text-center text-sm leading-6"
+              style={mutedTextStyle}
+            >
+              {helperText}
+            </p>
+          )}
         </section>
 
         <input

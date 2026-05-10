@@ -10,6 +10,7 @@ const OurStory = lazy(() => import('./components/OurStory'));
 const EventPage = lazy(() => import('./components/EventPage'));
 const PhotoGallery = lazy(() => import('./components/PhotoGallery'));
 const UploadPhotos = lazy(() => import('./components/UploadPhotos'));
+const QRCodePage = lazy(() => import('./components/QRCodePage'));
 const Blessings = lazy(() => import('./components/Blessings'));
 const WeddingParty = lazy(() => import('./components/WeddingParty'));
 const Registry = lazy(() => import('./components/Registry'));
@@ -41,9 +42,17 @@ const routeMap = {
   timeline: { path: '/timeline', Component: Timeline },
 };
 
+const simpleRoutes = ['/', '/upload', '/upload-photos', '/qr'];
+
 function AppContent() {
   const location = useLocation();
-  const isUploadScreen = location.pathname === '/' || location.pathname === '/upload-photos';
+  const enabledRoutes = Object.entries(siteConfig.features)
+    .filter(([, feature]) => feature.enabled)
+    .map(([key]) => routeMap[key]?.path)
+    .filter(Boolean);
+  const knownRoutes = [...simpleRoutes, '/home', ...enabledRoutes];
+  const isSimpleScreen =
+    simpleRoutes.includes(location.pathname) || !knownRoutes.includes(location.pathname);
 
   // Generate routes based on enabled features
   const getRoutes = () => {
@@ -71,22 +80,41 @@ function AppContent() {
 
   return (
     <div className="App flex flex-col min-h-screen bg-apple-gray-50">
-      {!isUploadScreen && <Navbar />}
+      {!isSimpleScreen && <Navbar />}
       <div className="flex-grow">
         <Routes>
+          {['/', '/upload', '/upload-photos'].map((path) => (
+            <Route
+              key={path}
+              path={path}
+              element={
+                <Suspense fallback={<Loading />}>
+                  <UploadPhotos />
+                </Suspense>
+              }
+            />
+          ))}
           <Route
-            path="/"
+            path="/qr"
+            element={
+              <Suspense fallback={<Loading />}>
+                <QRCodePage />
+              </Suspense>
+            }
+          />
+          <Route path="/home" element={<HomePage />} />
+          {getRoutes()}
+          <Route
+            path="*"
             element={
               <Suspense fallback={<Loading />}>
                 <UploadPhotos />
               </Suspense>
             }
           />
-          <Route path="/home" element={<HomePage />} />
-          {getRoutes()}
         </Routes>
       </div>
-      {!isUploadScreen && <Footer />}
+      {!isSimpleScreen && <Footer />}
     </div>
   );
 }
