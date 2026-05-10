@@ -272,7 +272,7 @@ const siteConfig = {
     errorLabelColor: "#ef4444",
     backgroundImage: "/images/homage_page_background.png",
     enableCaptions: true, // Allow users to add captions
-    maxFileSize: 10, // MB
+    maxFileSize: 4, // MB
     allowedTypes: ["image/jpeg", "image/png", "image/webp"],
   },
 

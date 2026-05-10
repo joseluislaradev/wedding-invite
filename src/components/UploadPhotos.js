@@ -9,10 +9,9 @@ const uploadStates = {
   error: 'error',
 };
 
-const MAX_IMAGE_DIMENSION = 1920;
-const INITIAL_JPEG_QUALITY = 0.8;
-const MIN_JPEG_QUALITY = 0.65;
-const QUALITY_STEP = 0.05;
+const MAX_IMAGE_DIMENSION = 2560;
+const DEFAULT_MAX_COMPRESSED_SIZE_MB = 4;
+const JPEG_QUALITY_STEPS = [0.9, 0.85, 0.8, 0.75, 0.7, 0.65];
 
 function UploadPhotos() {
   const [status, setStatus] = useState(uploadStates.idle);
@@ -78,7 +77,13 @@ function UploadPhotos() {
   );
 
   const getMaxCompressedSize = () => {
-    const maxFileSize = Number(uploadConfig.maxFileSize || localUploadConfig.maxFileSize || 4);
+    const configuredMaxFileSize = Number(
+      uploadConfig.maxFileSize || localUploadConfig.maxFileSize || DEFAULT_MAX_COMPRESSED_SIZE_MB
+    );
+    const maxFileSize = Number.isFinite(configuredMaxFileSize)
+      ? configuredMaxFileSize
+      : DEFAULT_MAX_COMPRESSED_SIZE_MB;
+
     return {
       maxFileSize,
       maxSizeBytes: maxFileSize * 1024 * 1024,
@@ -138,12 +143,8 @@ function UploadPhotos() {
     canvas.height = height;
     context.drawImage(image, 0, 0, width, height);
 
-    for (
-      let quality = INITIAL_JPEG_QUALITY;
-      quality >= MIN_JPEG_QUALITY - 0.001;
-      quality -= QUALITY_STEP
-    ) {
-      const blob = await canvasToBlob(canvas, Number(quality.toFixed(2)));
+    for (const quality of JPEG_QUALITY_STEPS) {
+      const blob = await canvasToBlob(canvas, quality);
 
       if (!blob) {
         throw new Error(getConfigValue('compressionFailedMessage', 'No se pudo preparar la foto.'));
