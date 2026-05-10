@@ -3,19 +3,39 @@ import { createWriteStream, unlinkSync, createReadStream } from 'fs';
 import { join } from 'path';
 import Busboy from 'busboy';
 
-// Google Auth setup
-const auth = new google.auth.GoogleAuth({
-  credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON),
-  scopes: ['https://www.googleapis.com/auth/drive'],
-});
+const headers = {
+  'Access-Control-Allow-Origin': '*',
+  'Content-Type': 'application/json',
+};
 
-const drive = google.drive({ version: 'v3', auth });
+const corsHeaders = {
+  ...headers,
+  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
 
-// Get folder ID from environment variable
-const FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID;
+const requiredEnvVars = [
+  'GOOGLE_CLIENT_ID',
+  'GOOGLE_CLIENT_SECRET',
+  'GOOGLE_REFRESH_TOKEN',
+  'GOOGLE_DRIVE_FOLDER_ID',
+];
 
-if (!FOLDER_ID) {
-  console.error('ERROR: GOOGLE_DRIVE_FOLDER_ID environment variable is not set');
+function getMissingEnvVars() {
+  return requiredEnvVars.filter((name) => !process.env[name]);
+}
+
+function createDriveClient() {
+  const oauth2Client = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET
+  );
+
+  oauth2Client.setCredentials({
+    refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+  });
+
+  return google.drive({ version: 'v3', auth: oauth2Client });
 }
 
 export async function handler(event) {
@@ -23,19 +43,26 @@ export async function handler(event) {
     if (event.httpMethod === 'OPTIONS') {
       return {
         statusCode: 200,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Headers': 'Content-Type',
-          'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        },
+        headers: corsHeaders,
       };
     }
 
     if (event.httpMethod !== 'POST') {
       return {
         statusCode: 405,
-        headers: { 'Access-Control-Allow-Origin': '*' },
+        headers,
         body: JSON.stringify({ success: false, message: 'Method not allowed.' }),
+      };
+    }
+
+    const missingEnvVars = getMissingEnvVars();
+    if (missingEnvVars.length > 0) {
+      const message = `Missing required upload environment variables: ${missingEnvVars.join(', ')}`;
+      console.error(message);
+      return {
+        statusCode: 500,
+        headers,
+        body: JSON.stringify({ success: false, message }),
       };
     }
 
@@ -47,18 +74,20 @@ export async function handler(event) {
       console.error('Invalid Content-Type:', contentType);
       return {
         statusCode: 400,
-        headers: { 'Access-Control-Allow-Origin': '*' },
+        headers,
         body: JSON.stringify({ success: false, message: 'Invalid Content-Type header.' }),
       };
     }
 
+    const drive = createDriveClient();
+    const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
     const bodyBuffer = Buffer.from(event.body, 'base64'); // Lambda sends body as base64
-    const busboy = new Busboy({ headers: { 'content-type': contentType } });
-    const fileIds = [];
+    const busboy = Busboy({ headers: { 'content-type': contentType } });
+    const uploadedFiles = [];
     const uploadPromises = [];
 
-    return new Promise((resolve, reject) => {
-      busboy.on('file', (fieldname, file, fileDetails, encoding, mimetype) => {
+    return new Promise((resolve) => {
+      busboy.on('file', (fieldname, file, fileDetails) => {
         console.log(`Processing file: ${fileDetails.filename}`);
         const uploadPromise = new Promise((res, rej) => {
           const filename = fileDetails.filename || `unknown_${Date.now()}`;
@@ -67,24 +96,35 @@ export async function handler(event) {
 
           file.pipe(writeStream);
 
-          file.on('end', async () => {
+          writeStream.on('finish', async () => {
             try {
-              const fileMetadata = { name: filename, parents: [FOLDER_ID] };
-              const media = { mimeType: mimetype, body: createReadStream(tempFilePath) };
+              const fileMetadata = { name: filename, parents: [folderId] };
+              const media = {
+                mimeType: fileDetails.mimeType || 'application/octet-stream',
+                body: createReadStream(tempFilePath),
+              };
 
               const response = await drive.files.create({
-                resource: fileMetadata,
+                requestBody: fileMetadata,
                 media,
-                fields: 'id',
+                fields: 'id, name, webViewLink',
               });
 
-              fileIds.push(response.data.id);
-              console.log(`Uploaded file ID: ${response.data.id}`);
+              uploadedFiles.push(response.data);
+              console.log(`Uploaded file to Drive: ${response.data.name} (${response.data.id})`);
               unlinkSync(tempFilePath); // Clean up temporary file
               res();
             } catch (error) {
-              console.error('Error during file upload:', error.message);
-              unlinkSync(tempFilePath); // Clean up on error
+              console.error('Error uploading file to Google Drive:', {
+                filename,
+                message: error.message,
+                code: error.code,
+              });
+              try {
+                unlinkSync(tempFilePath); // Clean up on error
+              } catch (cleanupError) {
+                console.error('Error cleaning temporary upload file:', cleanupError.message);
+              }
               rej(error);
             }
           });
@@ -103,21 +143,25 @@ export async function handler(event) {
           await Promise.all(uploadPromises);
           resolve({
             statusCode: 200,
-            headers: { 'Access-Control-Allow-Origin': '*' },
+            headers,
             body: JSON.stringify({
               success: true,
               message: 'Files uploaded successfully!',
-              fileIds,
+              files: uploadedFiles,
+              fileIds: uploadedFiles.map((file) => file.id),
             }),
           });
         } catch (error) {
-          console.error('Error completing upload:', error.message);
-          reject({
+          console.error('Error completing Google Drive upload:', {
+            message: error.message,
+            code: error.code,
+          });
+          resolve({
             statusCode: 500,
-            headers: { 'Access-Control-Allow-Origin': '*' },
+            headers,
             body: JSON.stringify({
               success: false,
-              message: 'File upload failed.',
+              message: 'File upload to Google Drive failed.',
               error: error.message,
             }),
           });
@@ -130,7 +174,7 @@ export async function handler(event) {
     console.error('Unexpected server error:', error.message);
     return {
       statusCode: 500,
-      headers: { 'Access-Control-Allow-Origin': '*' },
+      headers,
       body: JSON.stringify({
         success: false,
         message: 'Unexpected server error.',

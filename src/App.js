@@ -1,5 +1,5 @@
 import React, { lazy, Suspense } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import siteConfig from './siteConfig';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
@@ -41,7 +41,10 @@ const routeMap = {
   timeline: { path: '/timeline', Component: Timeline },
 };
 
-function App() {
+function AppContent() {
+  const location = useLocation();
+  const isUploadScreen = location.pathname === '/' || location.pathname === '/upload-photos';
+
   // Generate routes based on enabled features
   const getRoutes = () => {
     const routes = [];
@@ -67,17 +70,31 @@ function App() {
   };
 
   return (
-    <Router>
-      <div className="App flex flex-col min-h-screen bg-apple-gray-50">
-        <Navbar />
-        <div className="flex-grow">
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            {getRoutes()}
-          </Routes>
-        </div>
-        <Footer />
+    <div className="App flex flex-col min-h-screen bg-apple-gray-50">
+      {!isUploadScreen && <Navbar />}
+      <div className="flex-grow">
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <Suspense fallback={<Loading />}>
+                <UploadPhotos />
+              </Suspense>
+            }
+          />
+          <Route path="/home" element={<HomePage />} />
+          {getRoutes()}
+        </Routes>
       </div>
+      {!isUploadScreen && <Footer />}
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <Router>
+      <AppContent />
     </Router>
   );
 }

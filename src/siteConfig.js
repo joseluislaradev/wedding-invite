@@ -18,7 +18,7 @@ const siteConfig = {
   // ============================================
   // Options: "hindu", "christian", "custom"
   // This determines which event presets are available
-  weddingType: "hindu", // Change to "christian" or "custom" as needed
+  weddingType: "christian", // Change to "christian" or "custom" as needed
 
   // ============================================
   // FEATURE FLAGS - Enable/disable features
@@ -233,6 +233,20 @@ const siteConfig = {
   uploadPhotos: {
     title: "Upload Your Photos",
     subtitle: "Share your favorite moments from our special day!",
+    albumLabel: "Álbum de la boda",
+    instructions: "Toma una foto y se guardará automáticamente en nuestro álbum.",
+    openCameraMessage: "Toca aquí para abrir la cámara.",
+    cameraButton: "Tomar foto",
+    anotherPhotoButton: "Tomar otra foto",
+    uploadingMessage: "Subiendo tu foto...",
+    successMessage: "¡Gracias! Tu foto fue guardada.",
+    errorMessage: "No se pudo subir la foto. Intenta otra vez.",
+    noFileMessage: "No se seleccionó ninguna foto.",
+    invalidTypeMessage: "Ese formato de imagen no es compatible.",
+    fileTooLargeMessage: "La foto es muy grande. Máximo {maxFileSize} MB.",
+    retryButton: "Intentar de nuevo",
+    selectFileButton: "Seleccionar archivo",
+    helperText: "Sin login. Solo toma la foto y listo.",
     backgroundImage: "/images/homage_page_background.png",
     enableCaptions: true, // Allow users to add captions
     maxFileSize: 10, // MB

@@ -1,263 +1,208 @@
-import React, { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useRef, useState } from 'react';
 import siteConfig from '../siteConfig';
-import Card from './ui/Card';
-import Button from './ui/Button';
+
+const uploadStates = {
+  idle: 'idle',
+  uploading: 'uploading',
+  success: 'success',
+  error: 'error',
+};
 
 function UploadPhotos() {
-  const [files, setFiles] = useState([]);
-  const [previews, setPreviews] = useState([]);
+  const [status, setStatus] = useState(uploadStates.idle);
   const [message, setMessage] = useState('');
-  const [uploading, setUploading] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
+  const cameraInputRef = useRef(null);
   const fileInputRef = useRef(null);
-  const navigate = useNavigate();
+  const uploadConfig = siteConfig.uploadPhotos || {};
 
-  // Handle file selection
-  const handleFileChange = (selectedFiles) => {
-    const fileArray = Array.from(selectedFiles);
-    const validFiles = fileArray.filter((file) => {
-      const maxSize = (siteConfig.uploadPhotos?.maxFileSize || 10) * 1024 * 1024; // Convert to bytes
-      const allowedTypes = siteConfig.uploadPhotos?.allowedTypes || ['image/jpeg', 'image/png', 'image/webp'];
-      
-      if (!allowedTypes.includes(file.type)) {
-        alert(`${file.name} is not a supported image type.`);
-        return false;
-      }
-      if (file.size > maxSize) {
-        alert(`${file.name} is too large. Maximum size is ${siteConfig.uploadPhotos?.maxFileSize || 10}MB.`);
-        return false;
-      }
-      return true;
-    });
+  const eventName =
+    siteConfig.couple?.displayName ||
+    uploadConfig.title ||
+    siteConfig.app?.name ||
+    'Nuestra boda';
 
-    setFiles([...files, ...validFiles]);
-    
-    // Create previews
-    validFiles.forEach((file) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPreviews((prev) => [...prev, { file, preview: reader.result }]);
-      };
-      reader.readAsDataURL(file);
-    });
-  };
+  const validateFile = (file) => {
+    const maxFileSize = uploadConfig.maxFileSize || 10;
+    const maxSize = maxFileSize * 1024 * 1024;
+    const allowedTypes = uploadConfig.allowedTypes || [
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+    ];
 
-  const handleInputChange = (e) => {
-    if (e.target.files.length > 0) {
-      handleFileChange(e.target.files);
+    if (!file) {
+      return uploadConfig.noFileMessage || 'No se seleccionó ninguna foto.';
     }
-  };
 
-  // Drag and drop handlers
-  const handleDragEnter = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleFileChange(e.dataTransfer.files);
+    if (!allowedTypes.includes(file.type)) {
+      return uploadConfig.invalidTypeMessage || 'Ese formato de imagen no es compatible.';
     }
+
+    if (file.size > maxSize) {
+      return (uploadConfig.fileTooLargeMessage || 'La foto es muy grande. Máximo {maxFileSize} MB.')
+        .replace('{maxFileSize}', maxFileSize);
+    }
+
+    return '';
   };
 
-  // Remove file
-  const removeFile = (index) => {
-    setFiles(files.filter((_, i) => i !== index));
-    setPreviews(previews.filter((_, i) => i !== index));
-  };
+  const uploadFile = async (file) => {
+    const validationError = validateFile(file);
 
-  // Simulate upload progress
-  const simulateProgress = () => {
-    return new Promise((resolve) => {
-      let progressValue = 0;
-      const interval = setInterval(() => {
-        progressValue += 10;
-        setProgress(progressValue);
-        if (progressValue >= 100) {
-          clearInterval(interval);
-          resolve();
-        }
-      }, 100);
-    });
-  };
-
-  // Handle file upload
-  const handleUpload = async () => {
-    if (files.length === 0) {
-      setMessage('Please select at least one file to upload.');
+    if (validationError) {
+      setStatus(uploadStates.error);
+      setMessage(validationError);
       return;
     }
 
-    setUploading(true);
-    setMessage('');
+    setStatus(uploadStates.uploading);
+    setMessage(uploadConfig.uploadingMessage || 'Subiendo tu foto...');
+
     const formData = new FormData();
-    files.forEach((file) => formData.append('images', file));
+    formData.append('images', file);
 
     try {
-      await simulateProgress();
-
       const response = await fetch('/.netlify/functions/upload', {
         method: 'POST',
         body: formData,
       });
 
-      const result = await response.json();
+      const contentType = response.headers.get('content-type') || '';
+      const result = contentType.includes('application/json')
+        ? await response.json()
+        : { success: false, message: await response.text() };
 
-      if (response.ok && result.success) {
-        setMessage('Files uploaded successfully!');
-        setTimeout(() => {
-          navigate('/gallery');
-        }, 2000);
-      } else {
-        setMessage(result.message || 'Failed to upload files.');
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || 'No se pudo guardar la foto.');
       }
+
+      setStatus(uploadStates.success);
+      setMessage(uploadConfig.successMessage || '¡Gracias! Tu foto fue guardada.');
     } catch (error) {
-      console.error('Error during upload:', error);
-      setMessage('An unexpected error occurred.');
-    } finally {
-      setUploading(false);
+      console.error('Error during photo upload:', error);
+      setStatus(uploadStates.error);
+      setMessage(uploadConfig.errorMessage || 'No se pudo subir la foto. Intenta otra vez.');
     }
   };
 
+  const handleInputChange = (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    uploadFile(file);
+  };
+
+  const openCamera = () => {
+    if (status !== uploadStates.uploading) {
+      cameraInputRef.current?.click();
+    }
+  };
+
+  const openFilePicker = () => {
+    if (status !== uploadStates.uploading) {
+      fileInputRef.current?.click();
+    }
+  };
+
+  const isUploading = status === uploadStates.uploading;
+  const isSuccess = status === uploadStates.success;
+  const isError = status === uploadStates.error;
+
   return (
-    <div className="min-h-screen bg-apple-gray-50 pt-24 pb-20">
-      <div className="section-container">
-        {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-4xl sm:text-title font-semibold text-apple-gray-900 mb-4">
-            {siteConfig.uploadPhotos?.title || 'Upload Your Photos'}
-          </h1>
-          <p className="text-lg text-apple-gray-600 max-w-2xl mx-auto">
-            {siteConfig.uploadPhotos?.subtitle || 'Share your favorite moments from our special day!'}
+    <main className="min-h-screen bg-gradient-to-br from-sky-100 via-violet-100 to-fuchsia-200 px-5 pb-8 pt-8 text-apple-gray-900">
+      <div className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-md flex-col">
+        <header className="mb-6 text-center">
+          <p className="mb-2 text-sm font-semibold uppercase tracking-[0.18em] text-apple-gray-600">
+            {uploadConfig.albumLabel || 'Álbum de la boda'}
           </p>
-        </div>
+          <h1 className="text-4xl font-bold leading-tight text-apple-gray-950">
+            {eventName}
+          </h1>
+          <p className="mx-auto mt-3 max-w-xs text-lg leading-7 text-apple-gray-700">
+            {uploadConfig.instructions || 'Toma una foto y se guardará automáticamente en nuestro álbum.'}
+          </p>
+        </header>
 
-        {/* Drag and Drop Area */}
-        <Card
-          className={`p-12 mb-8 transition-all ${
-            isDragging ? 'border-2 border-apple-blue-500 bg-apple-blue-50' : 'border-2 border-dashed border-apple-gray-300'
-          }`}
-          onDragEnter={handleDragEnter}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-        >
-          <div className="text-center">
-            <div className="text-6xl mb-4">📸</div>
-            <h3 className="text-xl font-semibold text-apple-gray-900 mb-2">
-              {isDragging ? 'Drop files here' : 'Drag & drop photos here'}
-            </h3>
-            <p className="text-apple-gray-600 mb-6">or</p>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={handleInputChange}
-              className="hidden"
-            />
-            <Button
-              variant="secondary"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-            >
-              Choose Files
-            </Button>
-            <p className="text-sm text-apple-gray-500 mt-4">
-              Supported: JPEG, PNG, WebP (Max {siteConfig.uploadPhotos?.maxFileSize || 10}MB per file)
-            </p>
-          </div>
-        </Card>
-
-        {/* File Previews */}
-        {previews.length > 0 && (
-          <div className="mb-8">
-            <h2 className="text-xl font-semibold text-apple-gray-900 mb-4">
-              Selected Photos ({previews.length})
-            </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-              {previews.map((preview, index) => (
-                <Card key={index} className="relative group overflow-hidden">
-                  <img
-                    src={preview.preview}
-                    alt={`Preview ${index + 1}`}
-                    className="w-full aspect-square object-cover"
-                  />
-                  <button
-                    onClick={() => removeFile(index)}
-                    className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                    aria-label="Remove file"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                  <p className="p-2 text-xs text-apple-gray-600 truncate">{preview.file.name}</p>
-                </Card>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Upload Button and Progress */}
-        {files.length > 0 && (
-          <div className="text-center">
-            <Button
-              variant="primary"
-              size="lg"
-              onClick={handleUpload}
-              disabled={uploading}
-              className="mb-6"
-            >
-              {uploading ? 'Uploading...' : `Upload ${files.length} Photo${files.length > 1 ? 's' : ''}`}
-            </Button>
-
-            {uploading && (
-              <div className="max-w-md mx-auto">
-                <div className="w-full bg-apple-gray-200 rounded-full h-3 mb-2">
-                  <div
-                    className="bg-apple-blue-500 h-3 rounded-full transition-all duration-300"
-                    style={{ width: `${progress}%` }}
-                  />
-                </div>
-                <p className="text-sm text-apple-gray-600">{progress}% complete</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Status Message */}
-        {message && (
-          <div
-            className={`mt-6 p-4 rounded-xl text-center ${
-              message.includes('successfully')
-                ? 'bg-green-50 text-green-700'
-                : 'bg-red-50 text-red-700'
-            }`}
+        <section className="flex flex-1 flex-col rounded-[2rem] border-2 border-white/80 bg-white/45 p-5 shadow-apple-xl backdrop-blur-apple">
+          <button
+            type="button"
+            onClick={openCamera}
+            disabled={isUploading}
+            className="flex min-h-[430px] flex-1 flex-col items-center justify-center rounded-[1.5rem] border-2 border-white/80 bg-white/35 px-6 py-10 text-center shadow-apple transition active:scale-[0.99] disabled:cursor-wait disabled:opacity-80"
           >
-            {message}
-          </div>
-        )}
+            <span className="mb-7 flex h-28 w-28 items-center justify-center rounded-3xl bg-gradient-to-br from-cyan-400 to-fuchsia-600 shadow-apple-lg">
+              <svg
+                className="h-16 w-16 text-white"
+                viewBox="0 0 64 64"
+                fill="none"
+                aria-hidden="true"
+              >
+                <path
+                  d="M14 22.5C14 19.46 16.46 17 19.5 17H25L28 12H39L42 17H45.5C48.54 17 51 19.46 51 22.5V44.5C51 47.54 48.54 50 45.5 50H19.5C16.46 50 14 47.54 14 44.5V22.5Z"
+                  fill="currentColor"
+                />
+                <circle cx="32.5" cy="34" r="10.5" fill="#312e81" opacity="0.25" />
+                <circle cx="32.5" cy="34" r="8" stroke="#fff" strokeWidth="4" />
+                <circle cx="44.5" cy="24.5" r="3.5" fill="#fff" opacity="0.9" />
+              </svg>
+            </span>
+
+            <span className="text-3xl font-bold text-indigo-700">
+              {isSuccess
+                ? uploadConfig.anotherPhotoButton || 'Tomar otra foto'
+                : uploadConfig.cameraButton || 'Tomar foto'}
+            </span>
+            <span className="mt-4 min-h-[3.5rem] text-lg leading-7 text-apple-gray-700">
+              {message || uploadConfig.openCameraMessage || 'Toca aquí para abrir la cámara.'}
+            </span>
+
+            {isUploading && (
+              <span className="mt-8 h-3 w-40 overflow-hidden rounded-full bg-white/70">
+                <span className="block h-full w-2/3 animate-pulse rounded-full bg-indigo-600" />
+              </span>
+            )}
+          </button>
+
+          {isError && (
+            <button
+              type="button"
+              onClick={openCamera}
+              className="mt-4 w-full rounded-2xl bg-apple-gray-900 px-6 py-5 text-lg font-bold text-white shadow-apple active:scale-[0.99]"
+            >
+              {uploadConfig.retryButton || 'Intentar de nuevo'}
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={openFilePicker}
+            disabled={isUploading}
+            className="mt-4 w-full rounded-2xl border border-white/70 bg-white/35 px-5 py-4 text-base font-semibold text-indigo-700 shadow-apple disabled:cursor-wait disabled:opacity-70"
+          >
+            {uploadConfig.selectFileButton || 'Seleccionar archivo'}
+          </button>
+
+          <p className="mt-4 text-center text-sm leading-6 text-apple-gray-600">
+            {uploadConfig.helperText || 'Sin login. Solo toma la foto y listo.'}
+          </p>
+        </section>
+
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleInputChange}
+          className="hidden"
+        />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleInputChange}
+          className="hidden"
+        />
       </div>
-    </div>
+    </main>
   );
 }
 
