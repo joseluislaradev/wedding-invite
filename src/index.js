@@ -18,7 +18,7 @@ const setFavicon = (faviconPath) => {
 };
 
 // Set your custom favicon here
-setFavicon('/images/MK.png'); // The path relative to the public directory
+setFavicon('/MK.png'); // The path relative to the public directory
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(

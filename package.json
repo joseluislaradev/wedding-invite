@@ -21,7 +21,6 @@
   "bugs": {
     "url": "https://github.com/your-username/wedding-invite/issues"
   },
-  "homepage": "https://github.com/your-username/wedding-invite#readme",
   "private": true,
   "dependencies": {
     "@testing-library/jest-dom": "^5.17.0",

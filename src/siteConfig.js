@@ -25,17 +25,17 @@ const siteConfig = {
   // ============================================
   // All features are enabled by default - set to false to disable any feature
   features: {
-    homepage: { enabled: true, label: "Home" },
-    ourStory: { enabled: true, label: "Our Story" },
-    events: { enabled: true, label: "Events & RSVP" },
+    homepage: { enabled: false, label: "Home" },
+    ourStory: { enabled: false, label: "Our Story" },
+    events: { enabled: false, label: "Events & RSVP" },
     photoGallery: { enabled: true, label: "Photo Gallery" },
     uploadPhotos: { enabled: true, label: "Upload Photos" },
-    blessings: { enabled: true, label: "Blessings" },
-    weddingParty: { enabled: true, label: "Wedding Party" },
-    registry: { enabled: true, label: "Registry" },
-    travel: { enabled: true, label: "Travel & Accommodation" },
-    faq: { enabled: true, label: "FAQ" },
-    timeline: { enabled: true, label: "Timeline" },
+    blessings: { enabled: false, label: "Blessings" },
+    weddingParty: { enabled: false, label: "Wedding Party" },
+    registry: { enabled: false, label: "Registry" },
+    travel: { enabled: false, label: "Travel & Accommodation" },
+    faq: { enabled: false, label: "FAQ" },
+    timeline: { enabled: false, label: "Timeline" },
   },
 
   // ============================================
