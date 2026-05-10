@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import siteConfig from '../siteConfig';
 
 const uploadStates = {
@@ -11,13 +11,41 @@ const uploadStates = {
 function UploadPhotos() {
   const [status, setStatus] = useState(uploadStates.idle);
   const [message, setMessage] = useState('');
+  const [sheetConfig, setSheetConfig] = useState({});
   const cameraInputRef = useRef(null);
   const fileInputRef = useRef(null);
-  const uploadConfig = siteConfig.uploadPhotos || {};
+  const uploadConfig = {
+    ...(siteConfig.uploadPhotos || {}),
+    ...sheetConfig,
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadSheetConfig = async () => {
+      try {
+        const response = await fetch('/.netlify/functions/upload-config');
+        const result = await response.json();
+
+        if (isMounted && response.ok && result.success && result.config) {
+          setSheetConfig(result.config);
+        }
+      } catch (error) {
+        console.warn('Using local upload config because Google Sheets config could not be loaded.', error);
+      }
+    };
+
+    loadSheetConfig();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const eventName =
-    siteConfig.couple?.displayName ||
+    uploadConfig.eventName ||
     uploadConfig.title ||
+    siteConfig.couple?.displayName ||
     siteConfig.app?.name ||
     'Nuestra boda';
 
@@ -106,30 +134,57 @@ function UploadPhotos() {
   const isUploading = status === uploadStates.uploading;
   const isSuccess = status === uploadStates.success;
   const isError = status === uploadStates.error;
+  const pageStyle = {
+    color: uploadConfig.textColor,
+    background: `linear-gradient(135deg, ${uploadConfig.backgroundStartColor}, ${uploadConfig.backgroundMiddleColor}, ${uploadConfig.backgroundEndColor})`,
+  };
+  const mutedTextStyle = { color: uploadConfig.mutedTextColor };
+  const cardStyle = { backgroundColor: uploadConfig.cardBackgroundColor };
+  const panelStyle = { backgroundColor: uploadConfig.panelBackgroundColor };
+  const primaryTextStyle = { color: uploadConfig.primaryColor };
+  const iconStyle = {
+    background: `linear-gradient(135deg, ${uploadConfig.iconStartColor}, ${uploadConfig.iconEndColor})`,
+  };
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-sky-100 via-violet-100 to-fuchsia-200 px-5 pb-8 pt-8 text-apple-gray-900">
+    <main
+      className="min-h-screen px-5 pb-8 pt-8"
+      style={pageStyle}
+    >
       <div className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-md flex-col">
         <header className="mb-6 text-center">
-          <p className="mb-2 text-sm font-semibold uppercase tracking-[0.18em] text-apple-gray-600">
+          <p
+            className="mb-2 text-sm font-semibold uppercase tracking-[0.18em]"
+            style={mutedTextStyle}
+          >
             {uploadConfig.albumLabel || 'Álbum de la boda'}
           </p>
-          <h1 className="text-4xl font-bold leading-tight text-apple-gray-950">
+          <h1 className="text-4xl font-bold leading-tight">
             {eventName}
           </h1>
-          <p className="mx-auto mt-3 max-w-xs text-lg leading-7 text-apple-gray-700">
+          <p
+            className="mx-auto mt-3 max-w-xs text-lg leading-7"
+            style={mutedTextStyle}
+          >
             {uploadConfig.instructions || 'Toma una foto y se guardará automáticamente en nuestro álbum.'}
           </p>
         </header>
 
-        <section className="flex flex-1 flex-col rounded-[2rem] border-2 border-white/80 bg-white/45 p-5 shadow-apple-xl backdrop-blur-apple">
+        <section
+          className="flex flex-1 flex-col rounded-[2rem] border-2 border-white/80 p-5 shadow-apple-xl backdrop-blur-apple"
+          style={cardStyle}
+        >
           <button
             type="button"
             onClick={openCamera}
             disabled={isUploading}
-            className="flex min-h-[430px] flex-1 flex-col items-center justify-center rounded-[1.5rem] border-2 border-white/80 bg-white/35 px-6 py-10 text-center shadow-apple transition active:scale-[0.99] disabled:cursor-wait disabled:opacity-80"
+            className="flex min-h-[430px] flex-1 flex-col items-center justify-center rounded-[1.5rem] border-2 border-white/80 px-6 py-10 text-center shadow-apple transition active:scale-[0.99] disabled:cursor-wait disabled:opacity-80"
+            style={panelStyle}
           >
-            <span className="mb-7 flex h-28 w-28 items-center justify-center rounded-3xl bg-gradient-to-br from-cyan-400 to-fuchsia-600 shadow-apple-lg">
+            <span
+              className="mb-7 flex h-28 w-28 items-center justify-center rounded-3xl shadow-apple-lg"
+              style={iconStyle}
+            >
               <svg
                 className="h-16 w-16 text-white"
                 viewBox="0 0 64 64"
@@ -146,12 +201,18 @@ function UploadPhotos() {
               </svg>
             </span>
 
-            <span className="text-3xl font-bold text-indigo-700">
+            <span
+              className="text-3xl font-bold"
+              style={primaryTextStyle}
+            >
               {isSuccess
                 ? uploadConfig.anotherPhotoButton || 'Tomar otra foto'
                 : uploadConfig.cameraButton || 'Tomar foto'}
             </span>
-            <span className="mt-4 min-h-[3.5rem] text-lg leading-7 text-apple-gray-700">
+            <span
+              className="mt-4 min-h-[3.5rem] text-lg leading-7"
+              style={mutedTextStyle}
+            >
               {message || uploadConfig.openCameraMessage || 'Toca aquí para abrir la cámara.'}
             </span>
 
@@ -166,7 +227,8 @@ function UploadPhotos() {
             <button
               type="button"
               onClick={openCamera}
-              className="mt-4 w-full rounded-2xl bg-apple-gray-900 px-6 py-5 text-lg font-bold text-white shadow-apple active:scale-[0.99]"
+              className="mt-4 w-full rounded-2xl px-6 py-5 text-lg font-bold text-white shadow-apple active:scale-[0.99]"
+              style={{ backgroundColor: uploadConfig.primaryDarkColor }}
             >
               {uploadConfig.retryButton || 'Intentar de nuevo'}
             </button>
@@ -176,12 +238,16 @@ function UploadPhotos() {
             type="button"
             onClick={openFilePicker}
             disabled={isUploading}
-            className="mt-4 w-full rounded-2xl border border-white/70 bg-white/35 px-5 py-4 text-base font-semibold text-indigo-700 shadow-apple disabled:cursor-wait disabled:opacity-70"
+            className="mt-4 w-full rounded-2xl border border-white/70 px-5 py-4 text-base font-semibold shadow-apple disabled:cursor-wait disabled:opacity-70"
+            style={{ ...panelStyle, ...primaryTextStyle }}
           >
             {uploadConfig.selectFileButton || 'Seleccionar archivo'}
           </button>
 
-          <p className="mt-4 text-center text-sm leading-6 text-apple-gray-600">
+          <p
+            className="mt-4 text-center text-sm leading-6"
+            style={mutedTextStyle}
+          >
             {uploadConfig.helperText || 'Sin login. Solo toma la foto y listo.'}
           </p>
         </section>

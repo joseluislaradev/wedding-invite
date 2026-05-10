@@ -6,6 +6,10 @@ const functions = {
     file: 'netlify/functions/upload/upload.mjs',
     type: 'event',
   },
+  'upload-config': {
+    file: 'netlify/functions/upload-config/upload-config.mjs',
+    type: 'event',
+  },
   'get-photos': {
     file: 'netlify/functions/get-photos/get-photos.mjs',
     type: 'event',

@@ -247,6 +247,17 @@ const siteConfig = {
     retryButton: "Intentar de nuevo",
     selectFileButton: "Seleccionar archivo",
     helperText: "Sin login. Solo toma la foto y listo.",
+    backgroundStartColor: "#e0f2fe",
+    backgroundMiddleColor: "#ede9fe",
+    backgroundEndColor: "#f5d0fe",
+    textColor: "#1c1c1e",
+    mutedTextColor: "#636366",
+    cardBackgroundColor: "rgba(255, 255, 255, 0.45)",
+    panelBackgroundColor: "rgba(255, 255, 255, 0.35)",
+    primaryColor: "#4338ca",
+    primaryDarkColor: "#111827",
+    iconStartColor: "#22d3ee",
+    iconEndColor: "#c026d3",
     backgroundImage: "/images/homage_page_background.png",
     enableCaptions: true, // Allow users to add captions
     maxFileSize: 10, // MB
