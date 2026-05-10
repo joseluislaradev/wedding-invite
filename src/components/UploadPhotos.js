@@ -11,7 +11,7 @@ const uploadStates = {
 
 const MAX_IMAGE_DIMENSION = 2560;
 const DEFAULT_MAX_COMPRESSED_SIZE_MB = 4;
-const JPEG_QUALITY_STEPS = [0.9, 0.85, 0.8, 0.75, 0.7, 0.65];
+const JPEG_QUALITY_STEPS = [0.92, 0.88, 0.85, 0.8, 0.75];
 
 function UploadPhotos() {
   const [status, setStatus] = useState(uploadStates.idle);
@@ -128,6 +128,12 @@ function UploadPhotos() {
   });
 
   const compressImage = async (file) => {
+    const { maxFileSize, maxSizeBytes } = getMaxCompressedSize();
+
+    if (file.size <= maxSizeBytes) {
+      return file;
+    }
+
     const image = await loadImage(file);
     const scale = Math.min(
       1,
@@ -137,7 +143,6 @@ function UploadPhotos() {
     const height = Math.max(1, Math.round(image.naturalHeight * scale));
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
-    const { maxFileSize, maxSizeBytes } = getMaxCompressedSize();
 
     canvas.width = width;
     canvas.height = height;
@@ -151,6 +156,10 @@ function UploadPhotos() {
       }
 
       if (blob.size <= maxSizeBytes) {
+        if (blob.size >= file.size) {
+          return file;
+        }
+
         const originalName = file.name.replace(/\.[^.]+$/, '');
         return new File([blob], `${originalName || 'foto-boda'}.jpg`, {
           type: 'image/jpeg',
