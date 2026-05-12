@@ -16,7 +16,7 @@ const JPEG_QUALITY_STEPS = [0.92, 0.88, 0.85, 0.8, 0.75];
 function UploadPhotos() {
   const [status, setStatus] = useState(uploadStates.idle);
   const [message, setMessage] = useState('');
-  const [sheetConfig, setSheetConfig] = useState(null);
+  const [sheetConfig, setSheetConfig] = useState(undefined);
   const [progress, setProgress] = useState({
     current: 0,
     total: 0,
@@ -27,7 +27,8 @@ function UploadPhotos() {
   const cameraInputRef = useRef(null);
   const fileInputRef = useRef(null);
   const localUploadConfig = siteConfig.uploadPhotos || {};
-  const isUsingSheetConfig = sheetConfig !== null;
+  const isConfigLoading = sheetConfig === undefined;
+  const isUsingSheetConfig = sheetConfig !== undefined && sheetConfig !== null;
   const uploadConfig = isUsingSheetConfig ? sheetConfig : localUploadConfig;
 
   const getConfigValue = (key, fallback = '') => {
@@ -46,8 +47,14 @@ function UploadPhotos() {
         const response = await fetch('/.netlify/functions/upload-config');
         const result = await response.json();
 
-        if (isMounted && response.ok && result.success && result.config) {
+        if (!isMounted) {
+          return;
+        }
+
+        if (response.ok && result.success && result.config) {
           setSheetConfig(result.config);
+        } else {
+          setSheetConfig(null);
         }
       } catch (error) {
         console.warn('Using local upload config because Google Sheets config could not be loaded.', error);
@@ -341,6 +348,16 @@ function UploadPhotos() {
   const errorLabelStyle = {
     color: getConfigValue('errorLabelColor', '#ef4444'),
   };
+
+  if (isConfigLoading) {
+    return (
+      <main className="min-h-screen bg-white px-5 pb-8 pt-8 text-apple-gray-900">
+        <div className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-md items-center justify-center">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-apple-gray-200 border-t-apple-gray-900" />
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main
